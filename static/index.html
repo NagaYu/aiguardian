@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIGuardian — AIエージェント・コントロールダッシュボード</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --border: #2d333b;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 24px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .live-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--green); margin-left: auto;
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .live-label { color: var(--muted); font-size: 12px; }
+
+  main { padding: 20px 24px 60px; max-width: 1480px; margin: 0 auto; }
+
+  /* KPI cards */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .kpi .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .kpi .value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .value.red { color: var(--red); }
+  .kpi .value.yellow { color: var(--yellow); }
+  .kpi .value.green { color: var(--green); }
+  .kpi .value.accent { color: var(--accent); }
+
+  /* layout */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+  section.card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; margin-bottom: 18px;
+  }
+  section.card h2 {
+    font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  section.card h2 .tag {
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--border);
+  }
+
+  /* alerts */
+  .alert-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+  .alert-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--panel2); border-left: 3px solid var(--yellow);
+    border-radius: 6px; padding: 9px 12px; font-size: 13px;
+  }
+  .alert-item.critical { border-left-color: var(--red); }
+  .alert-item .who { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .alert-item .msg { color: var(--text); }
+  .alert-item .src { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 13px; padding: 12px; text-align: center; }
+
+  /* buttons */
+  .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  button {
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all .15s;
+  }
+  button:hover { border-color: var(--accent); transform: translateY(-1px); }
+  button.danger { background: #3d1418; border-color: #6e2228; color: #ffb3b8; }
+  button.danger:hover { border-color: var(--red); }
+  button.small { padding: 4px 10px; font-size: 11px; }
+  button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  .sim-status { color: var(--yellow); font-size: 12px; align-self: center; }
+
+  /* feed */
+  .feed { display: flex; flex-direction: column-reverse; gap: 6px; max-height: 380px; overflow-y: auto; }
+  .feed-item {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 7px 10px; border-radius: 6px; background: var(--panel2); font-size: 12.5px;
+    border-left: 3px solid var(--border);
+  }
+  .feed-item.forwarded { border-left-color: var(--green); }
+  .feed-item.blocked { border-left-color: var(--red); background: #2a1215; }
+  .feed-item.rejected { border-left-color: var(--red); opacity: .75; }
+  .feed-item.unblocked { border-left-color: var(--accent); }
+  .feed-item .route { color: var(--accent); white-space: nowrap; font-weight: 600; }
+  .feed-item .body { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .feed-item .badge {
+    font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge.fw { background: #12361f; color: var(--green); }
+  .badge.bk { background: #4b1113; color: var(--red); }
+  .badge.rj { background: #3a2a12; color: var(--yellow); }
+  .badge.ub { background: #14304b; color: var(--accent); }
+
+  /* blocked pairs */
+  .block-card {
+    background: #2a1215; border: 1px solid #6e2228; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .block-card .pair { font-weight: 700; color: #ffb3b8; margin-bottom: 4px; }
+  .block-card .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .block-card .nums { display: flex; gap: 18px; font-size: 12px; margin-bottom: 8px; }
+  .block-card .nums b { font-size: 15px; }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11px; }
+  td { padding: 7px 8px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  tr:hover td { background: var(--panel2); }
+  .lvl { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .lvl.ok { background: #12361f; color: var(--green); }
+  .lvl.warning { background: #3a2a12; color: var(--yellow); }
+  .lvl.critical { background: #4b1113; color: var(--red); }
+  .findings { color: var(--muted); font-size: 11px; }
+  .findings li { margin-left: 14px; }
+
+  /* clusters */
+  .cluster {
+    background: var(--panel2); border: 1px dashed var(--yellow);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .cluster .head { color: var(--yellow); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+  .cluster .members { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cluster .member {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px;
+  }
+  .cluster .member .meta { color: var(--muted); font-size: 11px; }
+
+  /* charts */
+  .charts { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .donut-legend { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+  .donut-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; }
+  .bars { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 7px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 80px; gap: 8px; align-items: center; font-size: 12px; }
+  .bar-row .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .bar-track { background: var(--panel2); border-radius: 4px; height: 14px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--purple)); transition: width .6s; }
+  .bar-row .num { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  /* notifications */
+  .notif {
+    background: #1f2a14; border: 1px solid #3a5220; border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 8px; font-size: 12.5px;
+  }
+  .notif .title { font-weight: 700; color: #b8e986; }
+  .notif .body { color: var(--muted); }
+
+  /* toast */
+  #toast {
+    position: fixed; right: 22px; bottom: 22px; z-index: 100;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast-item {
+    background: #4b1113; color: #ffd6d8; border: 1px solid var(--red);
+    border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6); animation: slidein .3s;
+    max-width: 420px;
+  }
+  @keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡 AIGuardian</h1>
+  <span class="sub">AIエージェント・コントロールダッシュボード — ShadowAI検知 × ループ遮断プロキシ</span>
+  <div class="live-dot"></div><span class="live-label" id="live-label">LIVE</span>
+</header>
+
+<main>
+  <!-- KPI -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- アラート -->
+  <section class="card">
+    <h2>🚨 アクティブアラート <span class="tag" id="alert-count"></span></h2>
+    <div class="alert-list" id="alerts"><div class="empty">アラートはありません</div></div>
+  </section>
+
+  <div class="grid">
+    <!-- 左カラム: LoopBreaker -->
+    <div>
+      <section class="card">
+        <h2>🔁 LoopBreaker_Proxy <span class="tag">無限ループ遮断</span></h2>
+        <div class="btn-row">
+          <button class="danger" id="btn-loop" onclick="simulate('loop')">⚡ 無限ループをシミュレート</button>
+          <button id="btn-normal" onclick="simulate('normal')">✉️ 正常トラフィックをシミュレート</button>
+          <button onclick="resetProxy()">♻️ リセット</button>
+          <span class="sim-status" id="sim-status"></span>
+        </div>
+        <div id="blocked-pairs"></div>
+        <h2 style="margin-top:16px">📡 通信フィード（プロキシ経由のラリー）</h2>
+        <div class="feed" id="feed"><div class="empty">まだ通信がありません — シミュレーションを実行してください</div></div>
+      </section>
+
+      <section class="card">
+        <h2>📨 管理者通知ログ</h2>
+        <div id="notifs"><div class="empty">通知はありません</div></div>
+      </section>
+    </div>
+
+    <!-- 右カラム: ShadowAI -->
+    <div>
+      <section class="card">
+        <h2>🕵️ ShadowAI_Detector <span class="tag">重複・野良AI検知</span></h2>
+        <div class="btn-row">
+          <button onclick="rescan()">🔍 台帳を再スキャン</button>
+        </div>
+        <div class="charts">
+          <svg id="donut" width="150" height="150" viewBox="0 0 42 42"></svg>
+          <div class="donut-legend" id="donut-legend"></div>
+          <div class="bars" id="cost-bars"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>👯 機能重複クラスタ</h2>
+        <div id="clusters"><div class="empty">重複はありません</div></div>
+      </section>
+
+      <section class="card">
+        <h2>📋 エージェント台帳とリスク評価</h2>
+        <table>
+          <thead><tr><th>エージェント</th><th>所有者 / 部署</th><th>リスク</th><th>検知内容</th><th>月額</th></tr></thead>
+          <tbody id="agent-rows"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let knownBlocks = new Set();
+let firstLoad = true;
+
+async function simulate(kind) {
+  await fetch(`/api/simulate/${kind}`, {method: "POST"});
+}
+async function resetProxy() {
+  await fetch("/api/reset", {method: "POST"});
+  knownBlocks = new Set();
+  refresh();
+}
+async function rescan() {
+  await fetch("/api/scan", {method: "POST"});
+  refresh();
+}
+async function unblock(a, b) {
+  await fetch("/api/proxy/unblock", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({a, b})
+  });
+  refresh();
+}
+
+function toast(msg) {
+  const el = document.createElement("div");
+  el.className = "toast-item";
+  el.textContent = msg;
+  document.getElementById("toast").appendChild(el);
+  setTimeout(() => el.remove(), 7000);
+}
+
+function renderKpis(k) {
+  const cards = [
+    ["登録エージェント", k.agents_total, ""],
+    ["重大リスク", k.agents_critical, k.agents_critical ? "red" : "green"],
+    ["要注意", k.agents_warning, k.agents_warning ? "yellow" : "green"],
+    ["重複クラスタ", k.duplicate_clusters, k.duplicate_clusters ? "yellow" : "green"],
+    ["重複によるムダ費用/月", yen(k.wasted_cost_jpy), "yellow"],
+    ["プロキシ通過メッセージ", k.proxy_messages, "accent"],
+    ["遮断中ペア", k.blocked_pairs, k.blocked_pairs ? "red" : "green"],
+    ["遮断による回避コスト", yen(k.saved_cost_jpy), "green"],
+  ];
+  document.getElementById("kpis").innerHTML = cards.map(([l, v, c]) =>
+    `<div class="kpi"><div class="label">${l}</div><div class="value ${c}">${v}</div></div>`).join("");
+}
+
+function renderAlerts(alerts) {
+  document.getElementById("alert-count").textContent = alerts.length + " 件";
+  const box = document.getElementById("alerts");
+  if (!alerts.length) { box.innerHTML = '<div class="empty">アラートはありません ✅</div>'; return; }
+  box.innerHTML = alerts.map(a =>
+    `<div class="alert-item ${a.severity}">
+       <span class="who">${esc(a.agent_name)}</span>
+       <span class="msg">${esc(a.message)}</span>
+       <span class="src">${esc(a.source)}</span>
+     </div>`).join("");
+}
+
+function renderFeed(events) {
+  const box = document.getElementById("feed");
+  if (!events.length) { box.innerHTML = '<div class="empty">まだ通信がありません — シミュレーションを実行してください</div>'; return; }
+  const badge = {forwarded: ["fw","転送"], blocked: ["bk","🚫 遮断"], rejected: ["rj","拒否"], unblocked: ["ub","解除"]};
+  box.innerHTML = events.map(e => {
+    const [cls, label] = badge[e.type] || ["fw", e.type];
+    const extra = e.type === "blocked" ? `（ラリー${e.rally_count}回）` :
+                  e.type === "forwarded" && e.repeats > 1 ? `（同一パターン${e.repeats}回目）` : "";
+    return `<div class="feed-item ${e.type}">
+      <span class="badge ${cls}">${label}</span>
+      <span class="route">${esc(e.sender)} → ${esc(e.recipient)}</span>
+      <span class="body">${esc(e.content || "")}</span>
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">${extra}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderBlocked(pairs) {
+  const box = document.getElementById("blocked-pairs");
+  box.innerHTML = pairs.map(b => `
+    <div class="block-card">
+      <div class="pair">🚫 ${esc(b.pair[0])} ↔ ${esc(b.pair[1])}</div>
+      <div class="meta">${esc(b.reason)} ｜ サンプル: 「${esc(b.sample_content)}」</div>
+      <div class="nums">
+        <span>消費済み <b style="color:var(--red)">${yen(b.burned_cost_jpy)}</b></span>
+        <span>回避見込 <b style="color:var(--green)">${yen(b.saved_cost_jpy)}</b></span>
+        <span>遮断後の試行 <b>${b.blocked_attempts}回</b></span>
+      </div>
+      <button class="small" onclick="unblock('${esc(b.pair[0])}','${esc(b.pair[1])}')">✅ 確認済み — 遮断を解除</button>
+    </div>`).join("");
+}
+
+function renderNotifs(notifs) {
+  const box = document.getElementById("notifs");
+  if (!notifs.length) { box.innerHTML = '<div class="empty">通知はありません</div>'; return; }
+  box.innerHTML = notifs.slice().reverse().map(n => `
+    <div class="notif">
+      <div class="title">${esc(n.title)}</div>
+      <div class="body">${esc(n.body)}</div>
+    </div>`).join("");
+}
+
+function renderDonut(summary) {
+  const data = [
+    ["重大", summary.critical, "var(--red)"],
+    ["要注意", summary.warning, "var(--yellow)"],
+    ["正常", summary.ok, "var(--green)"],
+  ];
+  const total = Math.max(summary.total, 1);
+  let offset = 25; // 12時の位置から開始
+  const C = 2 * Math.PI * 15.9155;
+  const segs = data.filter(d => d[1] > 0).map(([label, v, color]) => {
+    const frac = v / total * 100;
+    const seg = `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="${color}" stroke-width="5"
+      stroke-dasharray="${frac} ${100 - frac}" stroke-dashoffset="${offset}"></circle>`;
+    offset -= frac;
+    return seg;
+  }).join("");
+  document.getElementById("donut").innerHTML =
+    segs + `<text x="21" y="21.5" text-anchor="middle" dominant-baseline="middle"
+      fill="var(--text)" font-size="7" font-weight="700">${summary.total}体</text>`;
+  document.getElementById("donut-legend").innerHTML = data.map(([l, v, c]) =>
+    `<div><span class="sw" style="background:${c}"></span>${l} <b>${v}</b></div>`).join("");
+}
+
+function renderCostBars(agents) {
+  const sorted = agents.slice().sort((a, b) => b.monthly_cost_jpy - a.monthly_cost_jpy).slice(0, 6);
+  const max = Math.max(...sorted.map(a => a.monthly_cost_jpy), 1);
+  document.getElementById("cost-bars").innerHTML =
+    '<div style="color:var(--muted);font-size:11px;margin-bottom:2px">月間APIコスト上位</div>' +
+    sorted.map(a => `
+      <div class="bar-row">
+        <span class="name" title="${esc(a.name)}">${esc(a.name)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${a.monthly_cost_jpy / max * 100}%"></div></div>
+        <span class="num">${yen(a.monthly_cost_jpy)}</span>
+      </div>`).join("");
+}
+
+function renderClusters(clusters) {
+  const box = document.getElementById("clusters");
+  if (!clusters.length) { box.innerHTML = '<div class="empty">重複はありません ✅</div>'; return; }
+  box.innerHTML = clusters.map((c, i) => `
+    <div class="cluster">
+      <div class="head">クラスタ #${i + 1} — 同一機能 ${c.agents.length} 体 ／ 統合すれば ${yen(c.wasted_cost_jpy)}/月 削減可能</div>
+      <div class="members">${c.agents.map(a => `
+        <div class="member"><b>${esc(a.name)}</b>
+          <div class="meta">${esc(a.owner)} ｜ ${esc(a.department)} ｜ ${yen(a.monthly_cost_jpy)}/月</div>
+        </div>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+function renderAgents(agents) {
+  document.getElementById("agent-rows").innerHTML = agents
+    .slice().sort((a, b) => b.score - a.score)
+    .map(a => `
+      <tr>
+        <td><b>${esc(a.name)}</b><div style="color:var(--muted);font-size:11px">${esc(a.model)}</div></td>
+        <td>${esc(a.owner)}<div style="color:var(--muted);font-size:11px">${esc(a.department)}</div></td>
+        <td><span class="lvl ${a.level}">${{ok:"正常", warning:"要注意", critical:"重大"}[a.level]} ${a.score}</span></td>
+        <td><ul class="findings">${a.findings.map(f => `<li>${esc(f.detail)}</li>`).join("") || "—"}</ul></td>
+        <td style="font-variant-numeric:tabular-nums">${yen(a.monthly_cost_jpy)}</td>
+      </tr>`).join("");
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/state");
+    const s = await res.json();
+    renderKpis(s.kpis);
+    renderAlerts(s.alerts);
+    renderFeed(s.loop.events);
+    renderBlocked(s.loop.blocked_pairs);
+    renderNotifs(s.loop.notifications);
+    renderDonut(s.scan.summary);
+    renderCostBars(s.scan.agents);
+    renderClusters(s.scan.clusters);
+    renderAgents(s.scan.agents);
+
+    const sim = s.simulation;
+    document.getElementById("sim-status").textContent =
+      sim.running ? `▶ ${sim.name} シミュレーション実行中…` : "";
+    document.getElementById("btn-loop").disabled = sim.running;
+    document.getElementById("btn-normal").disabled = sim.running;
+    document.getElementById("live-label").textContent = "LIVE";
+
+    // 新規遮断をトースト通知
+    for (const b of s.loop.blocked_pairs) {
+      const key = b.pair.join("|");
+      if (!knownBlocks.has(key)) {
+        knownBlocks.add(key);
+        if (!firstLoad) toast(`🚨 無限ループを遮断: ${b.pair[0]} ↔ ${b.pair[1]}（ラリー${b.rally_count}回検知）`);
+      }
+    }
+    firstLoad = false;
+  } catch (e) {
+    document.getElementById("live-label").textContent = "接続待ち…";
+  }
+}
+
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

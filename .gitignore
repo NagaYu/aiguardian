@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ローカルツール設定
+.claude/
+
+# OS
+.DS_Store
+
+# 実運用の社内エージェント台帳（機密になり得るため誤コミット防止）
+data/agents.json

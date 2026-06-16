@@ -1,0 +1,3 @@
+# 開発補助ツール用（本体の動作には不要）
+# README用スクリーンショット生成: python tools/capture_screenshots.py
+playwright>=1.40
